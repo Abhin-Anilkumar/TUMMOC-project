@@ -31,12 +31,12 @@ resource "google_compute_subnetwork" "craftista_subnet" {
 }
 
 # ─────────────────────────────────────────
-# Firewall Rules
+# Firewall Rules (Locked Down - No Public IP)
 # ─────────────────────────────────────────
 
-# Allow SSH access
-resource "google_compute_firewall" "allow_ssh" {
-  name    = "craftista-allow-ssh"
+# Allow SSH via IAP only (gcloud compute ssh uses this)
+resource "google_compute_firewall" "allow_ssh_iap" {
+  name    = "craftista-allow-ssh-iap"
   network = google_compute_network.craftista_vpc.name
 
   allow {
@@ -44,14 +44,15 @@ resource "google_compute_firewall" "allow_ssh" {
     ports    = ["22"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  # IAP's IP range — only way to SSH into VMs
+  source_ranges = ["35.235.240.0/20"]
   target_tags   = ["craftista-vm"]
-  description   = "Allow SSH access to Craftista VMs"
+  description   = "Allow SSH via IAP tunnel only (gcloud compute ssh)"
 }
 
-# Allow HTTP traffic
-resource "google_compute_firewall" "allow_http" {
-  name    = "craftista-allow-http"
+# Allow HTTP from GCP Load Balancer only
+resource "google_compute_firewall" "allow_lb_traffic" {
+  name    = "craftista-allow-lb-traffic"
   network = google_compute_network.craftista_vpc.name
 
   allow {
@@ -59,24 +60,10 @@ resource "google_compute_firewall" "allow_http" {
     ports    = ["80"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["craftista-vm", "http-server"]
-  description   = "Allow HTTP traffic to Craftista VMs"
-}
-
-# Allow HTTPS traffic
-resource "google_compute_firewall" "allow_https" {
-  name    = "craftista-allow-https"
-  network = google_compute_network.craftista_vpc.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["443"]
-  }
-
-  source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["craftista-vm", "https-server"]
-  description   = "Allow HTTPS traffic to Craftista VMs"
+  # GCP Load Balancer + Health Check IP ranges
+  source_ranges = ["130.211.0.0/22", "35.191.0.0/16"]
+  target_tags   = ["craftista-vm"]
+  description   = "Allow HTTP traffic from GCP Load Balancer and health checks only"
 }
 
 # Allow internal communication between VMs
@@ -101,37 +88,6 @@ resource "google_compute_firewall" "allow_internal" {
   source_ranges = [var.subnet_cidr]
   target_tags   = ["craftista-vm"]
   description   = "Allow internal communication between Craftista VMs"
-}
-
-# Allow health check probes from GCP load balancer
-resource "google_compute_firewall" "allow_health_check" {
-  name    = "craftista-allow-health-check"
-  network = google_compute_network.craftista_vpc.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["80"]
-  }
-
-  # GCP health check IP ranges
-  source_ranges = ["130.211.0.0/22", "35.191.0.0/16"]
-  target_tags   = ["craftista-vm"]
-  description   = "Allow GCP load balancer health checks"
-}
-
-# Allow application ports (for debugging/direct access)
-resource "google_compute_firewall" "allow_app_ports" {
-  name    = "craftista-allow-app-ports"
-  network = google_compute_network.craftista_vpc.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["3000", "5000", "8080", "9090", "3001"]
-  }
-
-  source_ranges = [var.subnet_cidr]
-  target_tags   = ["craftista-vm"]
-  description   = "Allow application ports for internal access (Prometheus: 9090, Grafana: 3001)"
 }
 
 # ─────────────────────────────────────────

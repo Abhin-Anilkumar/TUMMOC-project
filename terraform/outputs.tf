@@ -28,13 +28,8 @@ output "vm_names" {
   value       = google_compute_instance.craftista_vm[*].name
 }
 
-output "vm_external_ips" {
-  description = "External IP addresses of VM instances"
-  value       = google_compute_instance.craftista_vm[*].network_interface[0].access_config[0].nat_ip
-}
-
 output "vm_internal_ips" {
-  description = "Internal IP addresses of VM instances"
+  description = "Internal IP addresses of VM instances (no public IPs)"
   value       = google_compute_instance.craftista_vm[*].network_interface[0].network_ip
 }
 
@@ -70,12 +65,12 @@ output "artifact_registry_url" {
 }
 
 # ─────────────────────────────────────────
-# SSH Connection Command
+# SSH Connection (via IAP tunnel - no public IP)
 # ─────────────────────────────────────────
 output "ssh_commands" {
-  description = "SSH commands to connect to each VM"
+  description = "SSH commands to connect via IAP tunnel (no public IP needed)"
   value = [
     for i, vm in google_compute_instance.craftista_vm :
-    "gcloud compute ssh ${vm.name} --zone=${var.zone} --project=${var.project_id}"
+    "gcloud compute ssh ${vm.name} --zone=${var.zone} --project=${var.project_id} --tunnel-through-iap"
   ]
 }

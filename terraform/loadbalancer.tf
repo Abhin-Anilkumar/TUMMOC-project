@@ -74,6 +74,7 @@ resource "google_compute_global_forwarding_rule" "craftista_forwarding_rule" {
   port_range            = "80"
   load_balancing_scheme = "EXTERNAL"
   ip_protocol           = "TCP"
+  ip_address            = google_compute_global_address.craftista_ip.id
 }
 
 # ─────────────────────────────────────────

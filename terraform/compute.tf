@@ -57,11 +57,7 @@ resource "google_compute_instance" "craftista_vm" {
 
   network_interface {
     subnetwork = google_compute_subnetwork.craftista_subnet.id
-
-    # Assign external IP for direct access
-    access_config {
-      // Ephemeral public IP
-    }
+    # No access_config = No public IP (access via LB + IAP SSH only)
   }
 
   metadata = var.ssh_pub_key != "" ? {
