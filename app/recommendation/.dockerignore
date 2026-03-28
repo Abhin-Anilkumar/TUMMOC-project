@@ -1,0 +1,11 @@
+*.exe
+*.test
+*.out
+.git
+.gitignore
+Dockerfile
+.dockerignore
+README.md
+*.md
+.DS_Store
+vendor/

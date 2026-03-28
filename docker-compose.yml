@@ -1,0 +1,130 @@
+# ============================================
+# Craftista Application - Docker Compose
+# ============================================
+# Usage:
+#   docker-compose up -d          # Start all services
+#   docker-compose down           # Stop all services
+#   docker-compose logs -f        # View logs
+#   docker-compose build          # Rebuild images
+# ============================================
+
+services:
+  # ─────────────────────────────────────────
+  # Nginx Reverse Proxy (Entry Point)
+  # ─────────────────────────────────────────
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: craftista-nginx
+    ports:
+      - "80:80"
+    depends_on:
+      frontend:
+        condition: service_healthy
+      catalogue:
+        condition: service_healthy
+    networks:
+      - craftista-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─────────────────────────────────────────
+  # Frontend Service (Node.js / Express)
+  # ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ./app/frontend
+      dockerfile: Dockerfile
+    container_name: craftista-frontend
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    expose:
+      - "3000"
+    networks:
+      - craftista-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─────────────────────────────────────────
+  # Catalogue Service (Python / Flask)
+  # ─────────────────────────────────────────
+  catalogue:
+    build:
+      context: ./app/catalogue
+      dockerfile: Dockerfile
+    container_name: craftista-catalogue
+    environment:
+      - FLASK_ENV=production
+    expose:
+      - "5000"
+    networks:
+      - craftista-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─────────────────────────────────────────
+  # Voting Service (Java / Spring Boot)
+  # ─────────────────────────────────────────
+  voting:
+    build:
+      context: ./app/voting
+      dockerfile: Dockerfile
+    container_name: craftista-voting
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    expose:
+      - "8080"
+    networks:
+      - craftista-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ─────────────────────────────────────────
+  # Recommendation Service (Go / Gin)
+  # ─────────────────────────────────────────
+  recommendation:
+    build:
+      context: ./app/recommendation
+      dockerfile: Dockerfile
+    container_name: craftista-recommendation
+    expose:
+      - "8080"
+    networks:
+      - craftista-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# ─────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────
+networks:
+  craftista-net:
+    driver: bridge
+    name: craftista-network

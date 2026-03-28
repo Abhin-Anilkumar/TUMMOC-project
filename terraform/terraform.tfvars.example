@@ -1,0 +1,38 @@
+# ============================================
+# Craftista - Terraform Variables Example
+# ============================================
+# Copy this file to terraform.tfvars and fill in your values:
+#   cp terraform.tfvars.example terraform.tfvars
+# ============================================
+
+# GCP Project (REQUIRED - replace with your project ID)
+project_id       = "your-gcp-project-id"
+credentials_file = "credentials.json"
+
+# Region & Zone
+region = "asia-south1"
+zone   = "asia-south1-a"
+
+# Compute
+machine_type   = "e2-medium"
+vm_count       = 2
+boot_disk_size = 30
+boot_disk_type = "pd-balanced"
+vm_image       = "ubuntu-os-cloud/ubuntu-2204-lts"
+
+# Network
+subnet_cidr = "10.0.1.0/24"
+
+# SSH
+ssh_user         = "craftista"
+ssh_pub_key_file = "~/.ssh/id_rsa.pub"
+
+# Environment
+environment = "production"
+
+# Labels
+labels = {
+  project    = "craftista"
+  managed_by = "terraform"
+  team       = "devops"
+}

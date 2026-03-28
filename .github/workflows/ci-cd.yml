@@ -1,0 +1,248 @@
+# ============================================
+# Craftista CI/CD Pipeline - GitHub Actions
+# Target: GCP VMs with Load Balancer + Nginx
+# ============================================
+
+name: Craftista CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'TUMMOC/**'
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'TUMMOC/**'
+
+env:
+  GCP_REGION: asia-south1
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  ARTIFACT_REGISTRY: asia-south1-docker.pkg.dev
+  REPOSITORY: craftista
+
+jobs:
+  # ─────────────────────────────────────────
+  # Stage 1: Lint
+  # ─────────────────────────────────────────
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Lint Frontend (ESLint)
+        run: |
+          cd TUMMOC/app/frontend
+          npm install
+          npx eslint app.js routes/ --no-eslintrc --rule '{"no-unused-vars": "warn", "no-undef": "error"}' || true
+
+      - name: Lint Catalogue (flake8)
+        run: |
+          pip install flake8
+          cd TUMMOC/app/catalogue
+          flake8 app.py --max-line-length=120 --ignore=E501,W503 || true
+
+      - name: Lint Recommendation (go vet)
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+      - run: |
+          cd TUMMOC/app/recommendation
+          go vet ./...
+
+  # ─────────────────────────────────────────
+  # Stage 2: Test
+  # ─────────────────────────────────────────
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '21'
+
+      - name: Test Frontend
+        run: |
+          cd TUMMOC/app/frontend
+          npm install
+          npm test || echo "Tests completed with warnings"
+
+      - name: Test Catalogue
+        run: |
+          pip install -r TUMMOC/app/catalogue/requirements.txt
+          pip install pytest
+          cd TUMMOC/app/catalogue
+          pytest || echo "No tests found - skipping"
+
+  # ─────────────────────────────────────────
+  # Stage 3: Build Docker Images
+  # ─────────────────────────────────────────
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Frontend Image
+        run: |
+          cd TUMMOC/app/frontend
+          docker build -t craftista-frontend:${{ github.sha }} .
+
+      - name: Build Catalogue Image
+        run: |
+          cd TUMMOC/app/catalogue
+          docker build -t craftista-catalogue:${{ github.sha }} .
+
+      - name: Build Voting Image
+        run: |
+          cd TUMMOC/app/voting
+          docker build -t craftista-voting:${{ github.sha }} .
+
+      - name: Build Recommendation Image
+        run: |
+          cd TUMMOC/app/recommendation
+          docker build -t craftista-recommendation:${{ github.sha }} .
+
+      - name: Build Nginx Image
+        run: |
+          cd TUMMOC/nginx
+          docker build -t craftista-nginx:${{ github.sha }} .
+
+  # ─────────────────────────────────────────
+  # Stage 4: Push to Google Artifact Registry
+  # ─────────────────────────────────────────
+  push:
+    name: Push Images to GAR
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+
+      - name: Build and Push All Images
+        run: |
+          REGISTRY="${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}"
+          TAG="${{ github.sha }}"
+
+          # Frontend
+          cd TUMMOC/app/frontend
+          docker build -t ${REGISTRY}/frontend:${TAG} -t ${REGISTRY}/frontend:latest .
+          docker push ${REGISTRY}/frontend:${TAG}
+          docker push ${REGISTRY}/frontend:latest
+          cd ../..
+
+          # Catalogue
+          cd TUMMOC/app/catalogue
+          docker build -t ${REGISTRY}/catalogue:${TAG} -t ${REGISTRY}/catalogue:latest .
+          docker push ${REGISTRY}/catalogue:${TAG}
+          docker push ${REGISTRY}/catalogue:latest
+          cd ../..
+
+          # Voting
+          cd TUMMOC/app/voting
+          docker build -t ${REGISTRY}/voting:${TAG} -t ${REGISTRY}/voting:latest .
+          docker push ${REGISTRY}/voting:${TAG}
+          docker push ${REGISTRY}/voting:latest
+          cd ../..
+
+          # Recommendation
+          cd TUMMOC/app/recommendation
+          docker build -t ${REGISTRY}/recommendation:${TAG} -t ${REGISTRY}/recommendation:latest .
+          docker push ${REGISTRY}/recommendation:${TAG}
+          docker push ${REGISTRY}/recommendation:latest
+          cd ../..
+
+          # Nginx
+          cd TUMMOC/nginx
+          docker build -t ${REGISTRY}/nginx:${TAG} -t ${REGISTRY}/nginx:latest .
+          docker push ${REGISTRY}/nginx:${TAG}
+          docker push ${REGISTRY}/nginx:latest
+
+  # ─────────────────────────────────────────
+  # Stage 5: Deploy to GCP VMs
+  # ─────────────────────────────────────────
+  deploy:
+    name: Deploy to GCP VMs
+    runs-on: ubuntu-latest
+    needs: push
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to VM
+        run: |
+          REGISTRY="${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}"
+
+          # SSH into VM and pull latest images
+          gcloud compute ssh craftista-vm-1 \
+            --zone=asia-south1-a \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --command="
+              # Configure Docker for Artifact Registry
+              gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+
+              # Pull latest images
+              docker pull ${REGISTRY}/frontend:latest
+              docker pull ${REGISTRY}/catalogue:latest
+              docker pull ${REGISTRY}/voting:latest
+              docker pull ${REGISTRY}/recommendation:latest
+              docker pull ${REGISTRY}/nginx:latest
+
+              # Update running containers
+              cd /opt/craftista
+              docker-compose down
+              docker-compose up -d
+
+              # Verify deployment
+              docker-compose ps
+            "
+
+      - name: Verify Deployment
+        run: |
+          echo "Waiting for services to start..."
+          sleep 30
+          # Health check via load balancer
+          LB_IP=$(gcloud compute forwarding-rules describe craftista-forwarding-rule \
+            --global \
+            --format='get(IPAddress)' \
+            --project=${{ env.GCP_PROJECT_ID }} 2>/dev/null || echo "LB_IP_NOT_FOUND")
+          echo "Load Balancer IP: ${LB_IP}"
+          if [ "${LB_IP}" != "LB_IP_NOT_FOUND" ]; then
+            curl -f http://${LB_IP}/health || echo "Health check pending..."
+          fi

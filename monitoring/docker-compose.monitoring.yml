@@ -1,0 +1,98 @@
+# ============================================
+# Craftista - Monitoring Stack
+# Prometheus + Grafana + Node Exporter
+# ============================================
+# Usage:
+#   docker-compose -f docker-compose.monitoring.yml up -d
+#   Access Grafana: http://localhost:3001 (admin/craftista123)
+#   Access Prometheus: http://localhost:9090
+# ============================================
+
+services:
+  # ─────────────────────────────────────────
+  # Prometheus - Metrics Collection
+  # ─────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: craftista-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - craftista-network
+      - monitoring-net
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────
+  # Grafana - Dashboards & Visualization
+  # ─────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: craftista-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=craftista123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_DOMAIN=localhost
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/craftista-dashboard.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring-net
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────
+  # Node Exporter - Host Metrics
+  # ─────────────────────────────────────────
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: craftista-node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - monitoring-net
+    restart: unless-stopped
+
+# ─────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────
+volumes:
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ─────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────
+networks:
+  craftista-network:
+    external: true
+    name: craftista-network
+  monitoring-net:
+    driver: bridge
+    name: monitoring-network

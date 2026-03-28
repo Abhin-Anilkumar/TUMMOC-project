@@ -1,0 +1,13 @@
+target/
+*.class
+*.jar
+*.war
+.git
+.gitignore
+Dockerfile
+.dockerignore
+README.md
+*.md
+.DS_Store
+.idea/
+*.iml
