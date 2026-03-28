@@ -72,39 +72,53 @@ gcloud services enable \
   monitoring.googleapis.com
 ```
 
-### 3. Service Account
+### 3. Service Account & Workload Identity Federation (WIF)
+
+GitHub Actions uses Workload Identity Federation (keyless authentication) to securely interact with GCP.
 
 ```bash
-# Create service account for Terraform & CI/CD
-gcloud iam service-accounts create craftista-devops \
-  --display-name="Craftista DevOps Service Account" \
-  --description="Service account for Terraform and CI/CD pipeline"
-
-# Grant required roles
 PROJECT_ID=$(gcloud config get-value project)
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
 
+# Enable IAM Credentials API
+gcloud services enable iamcredentials.googleapis.com
+
+# Create Workload Identity Pool and Provider for GitHub Actions
+gcloud iam workload-identity-pools create "github-pool" \
+  --location="global" --display-name="GitHub Actions Pool"
+  
+gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+  --location="global" --workload-identity-pool="github-pool" \
+  --display-name="GitHub Provider" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+  --attribute-condition="attribute.repository=='Abhin-Anilkumar/TUMMOC-project'" \
+  --issuer-uri="https://token.actions.githubusercontent.com"
+
+# Create service account for CI/CD
+gcloud iam service-accounts create craftista-devops \
+  --display-name="Craftista DevOps Service Account"
+
+# Grant roles to CI/CD Service Account
+for ROLE in roles/compute.admin roles/storage.admin roles/artifactregistry.admin roles/iam.serviceAccountUser roles/iap.tunnelResourceAccessor; do
+  gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:craftista-devops@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="$ROLE"
+done
+
+# Allow GitHub repo to impersonate the service account
+gcloud iam service-accounts add-iam-policy-binding \
+  craftista-devops@${PROJECT_ID}.iam.gserviceaccount.com \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-pool/attribute.repository/Abhin-Anilkumar/TUMMOC-project"
+
+# Make sure the VM can pull images from Artifact Registry
 gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:craftista-devops@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/compute.admin"
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role="roles/artifactregistry.reader"
 
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:craftista-devops@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/storage.admin"
-
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:craftista-devops@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/artifactregistry.admin"
-
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:craftista-devops@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/iam.serviceAccountUser"
-
-# Download credentials key
-gcloud iam service-accounts keys create credentials.json \
-  --iam-account=craftista-devops@${PROJECT_ID}.iam.gserviceaccount.com
-
-# Move key to terraform directory
-mv credentials.json TUMMOC/terraform/
+# Print details needed for GitHub Secrets
+echo "WIF_PROVIDER: projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+echo "WIF_SERVICE_ACCOUNT: craftista-devops@${PROJECT_ID}.iam.gserviceaccount.com"
 ```
 
 ### 4. SSH Key Pair
@@ -127,8 +141,9 @@ Navigate to your GitHub repo → **Settings** → **Secrets and variables** → 
 
 | Secret Name | Value | Description |
 |-------------|-------|-------------|
-| `GCP_SA_KEY` | Contents of `credentials.json` | GCP service account key (JSON) |
 | `GCP_PROJECT_ID` | `your-gcp-project-id` | GCP project ID |
+| `WIF_PROVIDER` | `projects/1234.../locations/global/workloadIdentityPools/...` | Workload Identity Provider string |
+| `WIF_SERVICE_ACCOUNT` | `craftista-devops@your-project.iam.gserviceaccount.com` | Service account used by GitHub Actions |
 
 ### 2. GitHub Environments (Optional)
 
@@ -203,8 +218,9 @@ GCP:
 
 GitHub:
   □ Repository is created
-  □ GCP_SA_KEY secret is configured
   □ GCP_PROJECT_ID secret is configured
+  □ WIF_PROVIDER secret is configured
+  □ WIF_SERVICE_ACCOUNT secret is configured
   □ Production environment is set up (optional)
 
 Terraform:

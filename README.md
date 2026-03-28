@@ -181,8 +181,9 @@ The GitHub Actions pipeline runs on every push and PR:
 
 | Secret | Description |
 |--------|-------------|
-| `GCP_SA_KEY` | GCP service account JSON key |
 | `GCP_PROJECT_ID` | Your GCP project ID |
+| `WIF_PROVIDER` | Workload Identity Federation Provider string |
+| `WIF_SERVICE_ACCOUNT` | The service account email used for CI/CD |
 
 ---
 
