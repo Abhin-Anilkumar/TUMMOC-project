@@ -283,8 +283,8 @@ jobs:
         run: |
           REGISTRY="${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}"
 
-          # Copy docker-compose.prod.yml to VM
-          gcloud compute scp /tmp/docker-compose.prod.yml craftista-vm-1:/opt/craftista/docker-compose.yml \
+          # Copy docker-compose.prod.yml to VM's /tmp directory first to avoid permission issues
+          gcloud compute scp /tmp/docker-compose.prod.yml craftista-vm-1:/tmp/docker-compose.prod.yml \
             --zone=asia-south1-a \
             --project=${{ env.GCP_PROJECT_ID }} \
             --tunnel-through-iap \
@@ -297,6 +297,9 @@ jobs:
             --tunnel-through-iap \
             --quiet \
             --command="
+              # Move compose file to final destination
+              sudo mv /tmp/docker-compose.prod.yml /opt/craftista/docker-compose.yml
+
               # Configure Docker for Artifact Registry
               sudo gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
 
