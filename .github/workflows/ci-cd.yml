@@ -8,12 +8,9 @@ name: Craftista CI/CD Pipeline
 on:
   push:
     branches: [main, develop]
-    paths:
-      - 'TUMMOC/**'
   pull_request:
     branches: [develop, main]
-    paths:
-      - 'TUMMOC/**'
+  workflow_dispatch:        # Manual trigger from GitHub Actions UI
 
 env:
   GCP_REGION: asia-south1
