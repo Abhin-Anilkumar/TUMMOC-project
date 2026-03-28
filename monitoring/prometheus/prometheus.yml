@@ -32,7 +32,7 @@ scrape_configs:
   # ── Node Exporter (Host Metrics) ────────
   - job_name: 'node-exporter'
     static_configs:
-      - targets: ['craftista-node-exporter:9100']
+      - targets: ['host.docker.internal:9100']
         labels:
           service: 'node-exporter'
 
