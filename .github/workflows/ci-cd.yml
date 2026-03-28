@@ -37,14 +37,14 @@ jobs:
 
       - name: Lint Frontend (ESLint)
         run: |
-          cd TUMMOC/app/frontend
+          cd app/frontend
           npm install
           npx eslint app.js routes/ --no-eslintrc --rule '{"no-unused-vars": "warn", "no-undef": "error"}' || true
 
       - name: Lint Catalogue (flake8)
         run: |
           pip install flake8
-          cd TUMMOC/app/catalogue
+          cd app/catalogue
           flake8 app.py --max-line-length=120 --ignore=E501,W503 || true
 
       - name: Lint Recommendation (go vet)
@@ -52,7 +52,7 @@ jobs:
         with:
           go-version: '1.20'
       - run: |
-          cd TUMMOC/app/recommendation
+          cd app/recommendation
           go vet ./...
 
   # ─────────────────────────────────────────
@@ -73,15 +73,15 @@ jobs:
 
       - name: Test Frontend
         run: |
-          cd TUMMOC/app/frontend
+          cd app/frontend
           npm install
           npm test || echo "Tests completed with warnings"
 
       - name: Test Catalogue
         run: |
-          pip install -r TUMMOC/app/catalogue/requirements.txt
+          pip install -r app/catalogue/requirements.txt
           pip install pytest
-          cd TUMMOC/app/catalogue
+          cd app/catalogue
           pytest || echo "No tests found - skipping"
 
   # ─────────────────────────────────────────
@@ -100,27 +100,27 @@ jobs:
 
       - name: Build Frontend Image
         run: |
-          cd TUMMOC/app/frontend
+          cd app/frontend
           docker build -t craftista-frontend:${{ github.sha }} .
 
       - name: Build Catalogue Image
         run: |
-          cd TUMMOC/app/catalogue
+          cd app/catalogue
           docker build -t craftista-catalogue:${{ github.sha }} .
 
       - name: Build Voting Image
         run: |
-          cd TUMMOC/app/voting
+          cd app/voting
           docker build -t craftista-voting:${{ github.sha }} .
 
       - name: Build Recommendation Image
         run: |
-          cd TUMMOC/app/recommendation
+          cd app/recommendation
           docker build -t craftista-recommendation:${{ github.sha }} .
 
       - name: Build Nginx Image
         run: |
-          cd TUMMOC/nginx
+          cd nginx
           docker build -t craftista-nginx:${{ github.sha }} .
 
   # ─────────────────────────────────────────
@@ -154,35 +154,35 @@ jobs:
           TAG="${{ github.sha }}"
 
           # Frontend
-          cd TUMMOC/app/frontend
+          cd app/frontend
           docker build -t ${REGISTRY}/frontend:${TAG} -t ${REGISTRY}/frontend:latest .
           docker push ${REGISTRY}/frontend:${TAG}
           docker push ${REGISTRY}/frontend:latest
           cd ../..
 
           # Catalogue
-          cd TUMMOC/app/catalogue
+          cd app/catalogue
           docker build -t ${REGISTRY}/catalogue:${TAG} -t ${REGISTRY}/catalogue:latest .
           docker push ${REGISTRY}/catalogue:${TAG}
           docker push ${REGISTRY}/catalogue:latest
           cd ../..
 
           # Voting
-          cd TUMMOC/app/voting
+          cd app/voting
           docker build -t ${REGISTRY}/voting:${TAG} -t ${REGISTRY}/voting:latest .
           docker push ${REGISTRY}/voting:${TAG}
           docker push ${REGISTRY}/voting:latest
           cd ../..
 
           # Recommendation
-          cd TUMMOC/app/recommendation
+          cd app/recommendation
           docker build -t ${REGISTRY}/recommendation:${TAG} -t ${REGISTRY}/recommendation:latest .
           docker push ${REGISTRY}/recommendation:${TAG}
           docker push ${REGISTRY}/recommendation:latest
           cd ../..
 
           # Nginx
-          cd TUMMOC/nginx
+          cd nginx
           docker build -t ${REGISTRY}/nginx:${TAG} -t ${REGISTRY}/nginx:latest .
           docker push ${REGISTRY}/nginx:${TAG}
           docker push ${REGISTRY}/nginx:latest
