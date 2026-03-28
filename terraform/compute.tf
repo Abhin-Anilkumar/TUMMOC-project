@@ -1,85 +1,26 @@
 # ============================================
-# Craftista - Compute Engine VMs
+# Craftista - Compute Engine VMs (Demo Specs)
+# e2-small | 1 VM | 10GB boot + 35GB data disk
 # ============================================
 
 # ─────────────────────────────────────────
-# Startup Script (installs Docker & Docker Compose)
+# Startup Script (reads from external file)
 # ─────────────────────────────────────────
 locals {
-  startup_script = <<-SCRIPT
-    #!/bin/bash
-    set -e
+  startup_script = file("${path.module}/../scripts/docker-install.sh")
+}
 
-    # Update system
-    apt-get update -y
-    apt-get upgrade -y
+# ─────────────────────────────────────────
+# Additional Data Disk (35GB)
+# ─────────────────────────────────────────
+resource "google_compute_disk" "craftista_data" {
+  count = var.vm_count
+  name  = "craftista-data-disk-${count.index + 1}"
+  type  = "pd-standard"
+  size  = var.data_disk_size
+  zone  = var.zone
 
-    # Install required packages
-    apt-get install -y \
-      apt-transport-https \
-      ca-certificates \
-      curl \
-      gnupg \
-      lsb-release \
-      software-properties-common \
-      git \
-      jq
-
-    # ── Install Docker ────────────────────
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-    apt-get update -y
-    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-    # Start Docker
-    systemctl enable docker
-    systemctl start docker
-
-    # Add user to docker group
-    usermod -aG docker ${var.ssh_user} || true
-
-    # ── Install Docker Compose (standalone) ──
-    DOCKER_COMPOSE_VERSION="v2.24.0"
-    curl -SL "https://github.com/docker/compose/releases/download/$${DOCKER_COMPOSE_VERSION}/docker-compose-linux-$(uname -m)" -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose
-
-    # ── Install Google Cloud SDK ──────────
-    # (Already available on GCE Ubuntu images)
-
-    # ── Create application directory ──────
-    mkdir -p /opt/craftista
-    chown -R ${var.ssh_user}:${var.ssh_user} /opt/craftista
-
-    # ── Install Node Exporter (for Prometheus monitoring) ──
-    NODE_EXPORTER_VERSION="1.7.0"
-    wget -q "https://github.com/prometheus/node_exporter/releases/download/v$${NODE_EXPORTER_VERSION}/node_exporter-$${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz"
-    tar xzf "node_exporter-$${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz"
-    mv "node_exporter-$${NODE_EXPORTER_VERSION}.linux-amd64/node_exporter" /usr/local/bin/
-    rm -rf "node_exporter-$${NODE_EXPORTER_VERSION}.linux-amd64"*
-
-    # Create systemd service for Node Exporter
-    cat > /etc/systemd/system/node_exporter.service <<EOF
-    [Unit]
-    Description=Node Exporter
-    Wants=network-online.target
-    After=network-online.target
-
-    [Service]
-    User=nobody
-    ExecStart=/usr/local/bin/node_exporter
-    Restart=always
-    RestartSec=5
-
-    [Install]
-    WantedBy=multi-user.target
-    EOF
-
-    systemctl daemon-reload
-    systemctl enable node_exporter
-    systemctl start node_exporter
-
-    echo "===== Startup script completed successfully ====="
-  SCRIPT
+  labels = var.labels
 }
 
 # ─────────────────────────────────────────
@@ -94,10 +35,11 @@ resource "google_compute_instance" "craftista_vm" {
   tags = ["craftista-vm", "http-server", "https-server"]
 
   labels = merge(var.labels, {
-    instance = "vm-${count.index + 1}"
+    instance    = "vm-${count.index + 1}"
     environment = var.environment
   })
 
+  # Boot disk (minimal 10GB)
   boot_disk {
     initialize_params {
       image = var.vm_image
@@ -106,10 +48,17 @@ resource "google_compute_instance" "craftista_vm" {
     }
   }
 
+  # Attached 35GB data disk
+  attached_disk {
+    source      = google_compute_disk.craftista_data[count.index].id
+    device_name = "craftista-data"
+    mode        = "READ_WRITE"
+  }
+
   network_interface {
     subnetwork = google_compute_subnetwork.craftista_subnet.id
 
-    # Assign external IP for direct access (remove for production with LB only)
+    # Assign external IP for direct access
     access_config {
       // Ephemeral public IP
     }

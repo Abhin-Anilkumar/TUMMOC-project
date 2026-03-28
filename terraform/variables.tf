@@ -34,25 +34,31 @@ variable "credentials_file" {
 variable "machine_type" {
   description = "GCE machine type for application VMs"
   type        = string
-  default     = "e2-medium"
+  default     = "e2-small"  # 0.5 vCPU, 2GB RAM (minimal for demo)
 }
 
 variable "vm_count" {
   description = "Number of application VM instances"
   type        = number
-  default     = 2
+  default     = 1  # Single VM for demo
 }
 
 variable "boot_disk_size" {
   description = "Boot disk size in GB"
   type        = number
-  default     = 30
+  default     = 10  # Minimal boot disk for demo
 }
 
 variable "boot_disk_type" {
   description = "Boot disk type (pd-standard, pd-ssd, pd-balanced)"
   type        = string
-  default     = "pd-balanced"
+  default     = "pd-standard"  # Cheapest option for demo
+}
+
+variable "data_disk_size" {
+  description = "Additional data disk size in GB (for Docker images/data)"
+  type        = number
+  default     = 35
 }
 
 variable "vm_image" {
