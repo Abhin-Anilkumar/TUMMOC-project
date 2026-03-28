@@ -10,6 +10,40 @@ A complete DevOps pipeline for the **Craftista** microservices application, depl
 
 ---
 
+## 📸 Application Showcase
+
+Expand the sections below to see screenshots of the active deployment and infrastructure:
+
+<details>
+<summary><b>1. Application Frontend (Origami of the Day)</b></summary>
+
+![Frontend Application](docs/images/frontend.png)
+*The Craftista application perfectly rendering on port 80 behind a Global GCP HTTP Load Balancer.*
+</details>
+
+<details>
+<summary><b>2. Secure Virtual Machine Infrastructure</b></summary>
+
+![GCP VM Instances](docs/images/gcp-vm.png)
+*Google Compute Engine instance (`craftista-vm-1`) running securely in `asia-south1-a`, with zero public IPs and strict IAP tunneling rules.*
+</details>
+
+<details>
+<summary><b>3. Global HTTP Load Balancer</b></summary>
+
+![External Load Balancer](docs/images/gcp-lb.png)
+*The Application Load Balancer (`craftista-url-map`) routing external web traffic to the internal Instance Group.*
+</details>
+
+<details>
+<summary><b>4. Successful CI/CD Pipeline Run</b></summary>
+
+![CI/CD Pipeline](docs/images/cicd.png)
+*GitHub Actions workflow completely green - successfully executing Linting, Testing, Docker Building, GAR Pushing, and Secure Deployment.*
+</details>
+
+---
+
 ## 📐 Architecture
 
 ```
