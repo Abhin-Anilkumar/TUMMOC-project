@@ -35,8 +35,15 @@ Expand the sections below to see screenshots of the active deployment and infras
 *The Application Load Balancer (`craftista-url-map`) routing external web traffic to the internal Instance Group.*
 </details>
 
+<details open>
+<summary><b>4. Comprehensive Monitoring Dashboard</b></summary>
+
+![Grafana Monitoring](docs/images/monitoring-dashboard.png)
+*Prometheus & Grafana seamlessly plotting live VM infrastructure metrics (CPU, Memory, Disk, Network) directly behind the Load Balancer proxy.*
+</details>
+
 <details>
-<summary><b>4. Successful CI/CD Pipeline Run</b></summary>
+<summary><b>5. Successful CI/CD Pipeline Run</b></summary>
 
 ![CI/CD Pipeline](docs/images/cicd.png)
 *GitHub Actions workflow completely green - successfully executing Linting, Testing, Docker Building, GAR Pushing, and Secure Deployment.*
@@ -184,18 +191,33 @@ gcloud compute ssh craftista-vm-1 --zone=asia-south1-a --command="
 curl http://<LOAD_BALANCER_IP>/health
 ```
 
-### 3. Start Monitoring
+### 3. Deploy & Access Monitoring
+
+The monitoring stack (Prometheus, Grafana, Node Exporter) is deliberately kept out of the CI/CD pipeline and is deployed manually to your VMs.
 
 ```bash
-cd TUMMOC/monitoring
+# Upload the monitoring folder using IAP SCP
+gcloud compute scp --recurse monitoring craftista-vm-1:/tmp/ \
+  --zone=asia-south1-a \
+  --tunnel-through-iap
 
-# Start monitoring stack (requires app network to exist)
-docker-compose -f docker-compose.monitoring.yml up -d
-
-# Access dashboards
-open http://localhost:9090    # Prometheus
-open http://localhost:3001    # Grafana (admin / craftista123)
+# SSH in, move the folder into place, and start monitoring
+gcloud compute ssh craftista-vm-1 \
+  --zone=asia-south1-a \
+  --tunnel-through-iap \
+  --command="
+    sudo rm -rf /opt/craftista/monitoring
+    sudo mv /tmp/monitoring /opt/craftista/
+    cd /opt/craftista/monitoring
+    sudo docker compose -f docker-compose.monitoring.yml up -d --remove-orphans
+  "
 ```
+
+**Accessing Grafana Securely:**
+Because Nginx dynamically proxies traffic on Port 80, you can securely access Grafana directly through the Load Balancer without opening any additional firewall ports!
+* **URL:** `http://<LOAD_BALANCER_IP>/grafana/` (Must include trailing slash)
+* **Username:** `admin`
+* **Password:** `craftista123`
 
 ---
 
