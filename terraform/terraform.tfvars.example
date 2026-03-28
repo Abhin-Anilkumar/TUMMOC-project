@@ -24,8 +24,8 @@ vm_image       = "ubuntu-os-cloud/ubuntu-2204-lts"
 subnet_cidr = "10.0.1.0/24"
 
 # SSH
-ssh_user         = "craftista"
-ssh_pub_key_file = "~/.ssh/id_rsa.pub"
+ssh_user    = "craftista"
+ssh_pub_key = ""  # Paste output of: cat ~/.ssh/id_rsa.pub
 
 # Environment
 environment = "production"

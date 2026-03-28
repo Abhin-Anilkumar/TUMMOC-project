@@ -79,10 +79,10 @@ variable "ssh_user" {
   default     = "craftista"
 }
 
-variable "ssh_pub_key_file" {
-  description = "Path to SSH public key file"
+variable "ssh_pub_key" {
+  description = "SSH public key content (run: cat ~/.ssh/id_rsa.pub)"
   type        = string
-  default     = "~/.ssh/id_rsa.pub"
+  default     = ""
 }
 
 # ─────────────────────────────────────────

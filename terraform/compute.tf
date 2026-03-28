@@ -115,9 +115,9 @@ resource "google_compute_instance" "craftista_vm" {
     }
   }
 
-  metadata = {
-    ssh-keys = "${var.ssh_user}:${file(var.ssh_pub_key_file)}"
-  }
+  metadata = var.ssh_pub_key != "" ? {
+    ssh-keys = "${var.ssh_user}:${var.ssh_pub_key}"
+  } : {}
 
   metadata_startup_script = local.startup_script
 
