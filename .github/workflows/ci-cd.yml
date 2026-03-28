@@ -184,7 +184,7 @@ jobs:
           docker push ${REGISTRY}/nginx:latest
 
   # ─────────────────────────────────────────
-  # Stage 5: Deploy to GCP VMs
+  # Stage 5: Deploy to GCP VMs (via IAP tunnel)
   # ─────────────────────────────────────────
   deploy:
     name: Deploy to GCP VMs
@@ -205,44 +205,118 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Deploy to VM
+      - name: Create production docker-compose on VM
         run: |
           REGISTRY="${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}"
 
-          # SSH into VM and pull latest images
+          # Generate docker-compose.prod.yml with Artifact Registry images
+          cat > /tmp/docker-compose.prod.yml <<'COMPOSE_EOF'
+          services:
+            nginx:
+              image: REGISTRY_PLACEHOLDER/nginx:latest
+              container_name: craftista-nginx
+              ports:
+                - "80:80"
+              depends_on:
+                - frontend
+                - catalogue
+              networks:
+                - craftista-net
+              restart: unless-stopped
+
+            frontend:
+              image: REGISTRY_PLACEHOLDER/frontend:latest
+              container_name: craftista-frontend
+              environment:
+                - NODE_ENV=production
+                - PORT=3000
+              expose:
+                - "3000"
+              networks:
+                - craftista-net
+              restart: unless-stopped
+
+            catalogue:
+              image: REGISTRY_PLACEHOLDER/catalogue:latest
+              container_name: craftista-catalogue
+              environment:
+                - FLASK_ENV=production
+              expose:
+                - "5000"
+              networks:
+                - craftista-net
+              restart: unless-stopped
+
+            voting:
+              image: REGISTRY_PLACEHOLDER/voting:latest
+              container_name: craftista-voting
+              expose:
+                - "8080"
+              networks:
+                - craftista-net
+              restart: unless-stopped
+
+            recommendation:
+              image: REGISTRY_PLACEHOLDER/recommendation:latest
+              container_name: craftista-recommendation
+              expose:
+                - "8080"
+              networks:
+                - craftista-net
+              restart: unless-stopped
+
+          networks:
+            craftista-net:
+              driver: bridge
+              name: craftista-network
+          COMPOSE_EOF
+
+          # Replace placeholder with actual registry URL
+          sed -i "s|REGISTRY_PLACEHOLDER|${REGISTRY}|g" /tmp/docker-compose.prod.yml
+
+      - name: Deploy to VM via IAP tunnel
+        run: |
+          REGISTRY="${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}"
+
+          # Copy docker-compose.prod.yml to VM
+          gcloud compute scp /tmp/docker-compose.prod.yml craftista-vm-1:/opt/craftista/docker-compose.yml \
+            --zone=asia-south1-a \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --tunnel-through-iap \
+            --quiet
+
+          # SSH via IAP and deploy
           gcloud compute ssh craftista-vm-1 \
             --zone=asia-south1-a \
             --project=${{ env.GCP_PROJECT_ID }} \
+            --tunnel-through-iap \
+            --quiet \
             --command="
               # Configure Docker for Artifact Registry
-              gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+              sudo gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
 
               # Pull latest images
-              docker pull ${REGISTRY}/frontend:latest
-              docker pull ${REGISTRY}/catalogue:latest
-              docker pull ${REGISTRY}/voting:latest
-              docker pull ${REGISTRY}/recommendation:latest
-              docker pull ${REGISTRY}/nginx:latest
-
-              # Update running containers
               cd /opt/craftista
-              docker-compose down
-              docker-compose up -d
+              sudo docker compose pull
 
-              # Verify deployment
-              docker-compose ps
+              # Deploy (rolling restart)
+              sudo docker compose up -d --remove-orphans
+
+              # Verify
+              sudo docker compose ps
             "
 
-      - name: Verify Deployment
+      - name: Verify Deployment via Load Balancer
         run: |
           echo "Waiting for services to start..."
-          sleep 30
-          # Health check via load balancer
-          LB_IP=$(gcloud compute forwarding-rules describe craftista-forwarding-rule \
+          sleep 45
+          # Health check via load balancer static IP
+          LB_IP=$(gcloud compute addresses describe craftista-global-ip \
             --global \
-            --format='get(IPAddress)' \
+            --format='get(address)' \
             --project=${{ env.GCP_PROJECT_ID }} 2>/dev/null || echo "LB_IP_NOT_FOUND")
           echo "Load Balancer IP: ${LB_IP}"
           if [ "${LB_IP}" != "LB_IP_NOT_FOUND" ]; then
-            curl -f http://${LB_IP}/health || echo "Health check pending..."
+            curl -sf --retry 3 --retry-delay 10 http://${LB_IP}/health || echo "Health check pending - LB may need a few minutes to become healthy"
           fi
+
